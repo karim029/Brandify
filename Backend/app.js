@@ -2,10 +2,9 @@
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const connectDB = require('./config/db');
 const UserRoutes = require('./features/users/routes/userRoutes');
 const ProductRoutes = require('./features/products/routes/productRoutes');
-const CategoryRoutes = require('./features/category/routes/categoryRoutes');
+const CategoryRoutes = require('./features/Category/routes/categoryRoutes');
 const ReviewRoutes = require('./features/reviews/routes/reviewRoutes');
 const CartRoutes = require('./features/Cart/routes/cartRoutes');
 const SubCategoryRoutes = require('./features/subcategory/routes/subCategoryRoutes');
@@ -23,7 +22,6 @@ const path = require('path');
 dotenv.config();
 
 const app = express();
-connectDB();
 
 app.use(cors());
 app.use(express.json());
