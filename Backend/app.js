@@ -13,7 +13,7 @@ const brand = require('./features/Brand/routes/brandRoutes');
 const OrderRoutes = require('./features/order/routes/orderRoutes');
 const DiscountRoutes = require('./features/discount/routes/discountRoutes');
 const Notifications = require('./features/notifications/routes/notificationRoutes');
-
+const { globalLimiter } = require('./middleware/rateLimiter/rateLimiter.js');
 const dotenv = require('dotenv');
 const body_parser = require('body-parser');
 const fs = require('fs');
@@ -29,6 +29,7 @@ app.use(cors());
 app.use(express.json());
 app.use(body_parser.json());
 app.use(cookieParser());
+app.use(globalLimiter);
 
 //? Serve images from the 'uploads' folder
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
