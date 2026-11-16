@@ -4,10 +4,10 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const generateToken = (userId) => {
-    return jwt.sign({ id: userId }, process.env.JWT_ACCESS_SECRET, { expiresIn: JWT_ACCESS_EXPIRY });
+    return jwt.sign({ id: userId }, process.env.JWT_ACCESS_SECRET, { expiresIn: process.env.JWT_ACCESS_EXPIRY || '15m' });
 }
 const generateRefreshToken = (userId) => {
-    return jwt.sign({ id: userId }, process.env.JWT_REFERESH_SECRET, { expiresIn: JWT_REFRESH_EXPIRY });
+    return jwt.sign({ id: userId }, process.env.JWT_REFERESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' });
 }
 
 const verifyToken = (token) => {
