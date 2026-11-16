@@ -5,6 +5,7 @@ const request = require('supertest');
 const app = require('../../../app');
 const User = require('../models/user');
 const mongoose = require('mongoose');
+const { MongoMemoryServer } = require('mongodb-memory-server');
 const dotenv = require('dotenv');
 const tokenUtil = require('../../../utils/tokenUtil');
 const bcrypt = require('bcrypt');
@@ -13,11 +14,13 @@ const { sendEmail } = require('../../../utils/emailService');
 jest.mock('../../../utils/emailService');
 dotenv.config();
 
+let mongoServer;
 let testUser; 
 let userToBeDeletedId;
 
 beforeAll(async () => {
-    const url = process.env.MONGO_URL;
+    mongoServer = await MongoMemoryServer.create();
+    const url = mongoServer.getUri();
     await mongoose.connect(url);
     await User.deleteMany();
 
@@ -47,6 +50,7 @@ beforeAll(async () => {
 afterAll(async () => {
     await User.deleteMany(); 
     await mongoose.connection.close();
+    await mongoServer.stop();
 });
 
 describe('User API', () => {

@@ -15,7 +15,7 @@ let adminToken;
 beforeAll(async () => {
     mongoServer = await MongoMemoryServer.create();
     
-    await mongoose.connect(process.env.MONGO_URL);
+    await mongoose.connect(mongoServer.getUri());
 
     const adminUser = await User.create({
         name: 'adminUser',
