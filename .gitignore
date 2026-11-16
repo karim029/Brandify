@@ -1,14 +1,15 @@
+# Editor
 .vscode/settings.json
-# Ignore Node.js files
-Backend/node_modules
-Backend/.env
 
-# Ignore Flutter files
-Frontend/Brandify/build/
-Frontend/Brandify/.dart_tool/
-Frontend/Brandify/.flutter-plugins
-Frontend/Brandify/pubspec.lock
-Frontend/Brandify/.gitignore
-Frontend/Brandify/linux/
-Frontend/Brandify/macos/
-Frontend/Brandify/windows/
+# Secrets: keep every .env out of git, but keep the example
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+coverage/
+npm-debug.log*
+
+# User uploads (created at runtime)
+Backend/uploads/
