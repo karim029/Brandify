@@ -48,33 +48,34 @@ class OrderController {
                     amountDeducted: discountAmount,
                     ref: validDiscount
                 };
-
-               
-
-                // create order
-                const orderData = {
-                    user: userId,
-                    items: userCart.items,
-                    totalPrice: totalPrice,
-                    address: address,
-                    discount: orderDiscount,
-
-                };
-                const order = await OrderService.createOrder(orderData);
-                 // make sure that the user cannot use this discount code another time
-                validDiscount.usedBy.push(userId);
-                await validDiscount.save();
-
-                // update product stock amount
-                userCart.items.forEach(async({product, quantity}) => {
-                    await ProductService.updateProductStock(product._id, quantity);
-                });
-                
-                // delete user cart
-                CartService.removeCart(userId);
-                return res.status(201).json({ success: true, orderData: order });
-
             }
+
+            // create order (with or without a discount code)
+            const orderData = {
+                user: userId,
+                items: userCart.items,
+                totalPrice: totalPrice,
+                address: address,
+                ...(orderDiscount && { discount: orderDiscount }),
+            };
+            const order = await OrderService.createOrder(orderData);
+
+            // make sure that the user cannot use this discount code another time
+            if (orderDiscount) {
+                orderDiscount.ref.usedBy.push(userId);
+                await orderDiscount.ref.save();
+            }
+
+            // update product stock amount
+            await Promise.all(
+                userCart.items.map(({ product, quantity }) =>
+                    ProductService.updateProductStock(product._id, quantity)
+                )
+            );
+
+            // delete user cart
+            await CartService.removeCart(userId);
+            return res.status(201).json({ success: true, orderData: order });
         } catch (error) {
             return res.status(500).json({ success: false, message: error.message });
         }
