@@ -1,167 +1,210 @@
 # Brandify
 
-Brandify is an e-commerce platform built around a single-brand storefront (think: one brand's own online shop rather than a multi-vendor marketplace). This repository currently contains the **backend REST API**; the Flutter mobile frontend is being developed separately and is not yet part of this codebase.
+**A REST API that gives a local clothing brand its own online store: catalog, stock-aware cart, checkout with discount codes, reviews, and an admin back office.**
 
-> **Status: Work in progress.** The backend covers the core commerce flow end-to-end (auth, catalog, cart, orders, discounts, reviews, notifications), but it has not been deployed or connected to a finished frontend yet. See [Project Status & Known Limitations](#project-status--known-limitations) below.
+Many small clothing brands sell through social-media DMs: there's no real catalog, stock is tracked by hand, and discounts and orders live in chat threads. Brandify is the backend for a brand's own storefront app. Customers browse products by category, size and color, add items to a cart that checks stock, and check out with an optional discount code. The brand's admin manages the catalog, orders, discount campaigns and customer notifications.
 
-## Table of Contents
+> **Status:** the backend is feature-complete for the core shopping flow but not deployed. The Flutter mobile client was built separately and is not in this repository. See [Known limitations](#known-limitations--whats-next).
 
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Features](#features)
-- [API Overview](#api-overview)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [Running Tests](#running-tests)
-- [Project Status & Known Limitations](#project-status--known-limitations)
-- [Folder Structure](#folder-structure)
+Built by a two-person team using feature branches and pull requests.
 
-## Tech Stack
+---
 
-- **Runtime:** Node.js + Express
-- **Database:** MongoDB with Mongoose
-- **Auth:** JWT-based authentication, role-based access control (`user` / `admin`)
-- **File uploads:** Multer (product images, brand logo)
-- **Email:** Nodemailer (password reset, email verification via OTP)
-- **Testing:** Jest + Supertest, with `mongodb-memory-server` so tests run against an in-memory database (no live MongoDB instance needed)
+## Screenshots
 
-## Architecture
+<!-- TODO: add screenshots or a short GIF: Postman requests, the mobile app, the admin flow -->
 
-The backend follows a **feature-based structure**: instead of grouping files globally by type (all controllers together, all models together), each business feature owns its own slice of the stack:
+| Product catalog | Cart & checkout | Admin: orders |
+|---|---|---|
+| _coming soon_ | _coming soon_ | _coming soon_ |
 
-```
-features/<feature-name>/
-  controllers/   # request handling
-  services/      # business logic / DB access
-  models/        # Mongoose schemas
-  routes/        # Express route definitions
-  tests/         # feature-specific tests (where present)
-```
-
-Shared, cross-feature concerns live outside `features/`:
-
-- `middleware/authentication` — verifies the JWT and attaches the user to the request
-- `middleware/roles` — restricts routes to specific roles (e.g. `admin`-only)
-- `middleware/fileUpload` — Multer configuration for image uploads
-- `utils/` — token signing/verification, email sending, OTP generation, query-filter building
+---
 
 ## Features
 
-| Feature | What it does |
+**Customers**
+- Register, log in, verify email with a one-time code (OTP), reset password by email
+- Short-lived JWT access token + refresh token in an `httpOnly`, `SameSite=strict` cookie (`/users/refresh`, `/users/logout`)
+- Browse products with pagination and filters: price range, name/description search, sizes, colors, category/subcategory
+- Cart with per-item customizations; quantities are checked against available stock
+- Checkout: the order total is computed server-side from the cart, an optional discount code is applied, product stock is decremented and the cart is cleared
+- Review products (rating + comment), list reviews per product, top 5 reviews
+- In-app notifications with read/unread state
+
+**Brand admin** (`admin` role)
+- Product CRUD with up to 5 images per product (Multer; images only, 5 MB max each)
+- Category and subcategory management
+- Brand profile: name, description, logo, social links, contact info, store location
+- Order management: list all orders (paginated, sortable), update status (`Pending → Processing → Delivered / Cancelled`), delete
+- Discount codes: percentage off, minimum order amount, maximum discount cap, expiry date, one use per customer
+- Notifications to one user or broadcast to everyone
+- Paginated user list, delete users
+
+**Cross-cutting**
+- Role-based access control middleware (`user` / `admin`)
+- Rate limiting: 100 req/min globally, 3 login attempts/min, 5 verification-email resends/min, 3 password-reset requests per 15 min per email
+- Passwords hashed with bcrypt; login/register responses return only safe user fields
+- Integration tests with Jest + Supertest against an in-memory MongoDB
+
+## Tech stack
+
+| Area | Tools |
 |---|---|
-| **Users** | Registration, login, email verification via OTP, password reset via email, profile fetch/update/delete, paginated admin user listing |
-| **Products** | CRUD for products (admin-only writes), public browsing/filtering, image upload (up to 5 images) |
-| **Categories & Subcategories** | CRUD (admin-only writes), browsing products by category |
-| **Brand** | Single brand profile (name, description, logo, social links, contact info, store location) — create/update/delete is admin-only |
-| **Cart** | Add/update/remove items, supports per-item customizations |
-| **Orders** | Place an order, view own orders (user), view/update/delete any order (admin), discount code applied at checkout |
-| **Discounts** | Admin-managed discount codes with percentage, min/max amount rules, expiration, and usage tracking |
-| **Reviews** | Users can review products (rating + comment), fetch product reviews / top-rated reviews |
-| **Notifications** | Admin-created notifications, per-user or broadcast, read/unread tracking |
+| Runtime / framework | Node.js, Express 4 |
+| Database | MongoDB, Mongoose 8 |
+| Auth | JSON Web Tokens (access + refresh), bcrypt |
+| Security | express-rate-limit, cookie-parser, CORS |
+| Files & email | Multer (image uploads), Nodemailer (Gmail SMTP) |
+| Testing | Jest, Supertest, mongodb-memory-server |
 
-## API Overview
+## Architecture
 
-All routes are mounted from `Backend/app.js`. Endpoints marked 🔒 require a valid JWT; 🔒👑 additionally require the `admin` role.
+The code is organised **by feature**, not by layer. Each feature folder owns its routes, controller, service and Mongoose model, so a change to orders stays inside `features/order/`.
 
-| Base path | Examples |
-|---|---|
-| `/users` | `POST /register`, `POST /login`, `POST /request-password-reset`, `POST /reset-password/:token`, `POST /verify-email`, 🔒 `GET/PUT /:id`, 🔒👑 `DELETE /:id`, `GET /` |
-| `/products` | `GET /`, `GET /:id`, 🔒👑 `POST /`, `PUT /:id`, `DELETE /:id` |
-| `/Category` | `GET /`, `GET /:name/products`, 🔒👑 `POST /`, `PUT /:id`, `DELETE /:id` |
-| `/subcategory` | `GET /`, `GET /:id`, 🔒👑 `POST /`, `PUT /:id`, `DELETE /:id` |
-| `/brand` | `GET /`, 🔒👑 `POST /`, `PUT /`, `DELETE /` |
-| `/Cart` | 🔒 `POST /`, `GET /`, `PUT /`, `DELETE /:productId`, `DELETE /` |
-| `/order` | 🔒 `POST /`, `GET /` (own orders), 🔒👑 `GET /allOrders`, `GET /:id`, `PUT /:id`, `DELETE /:id` |
-| `/discounts` | 🔒👑 `POST /`, `GET /:code`, `GET /`, `PUT /:code`, `DELETE /:code` |
-| `/reviews` | `GET /`, `GET /top`, 🔒 `POST /`, `DELETE /:id` |
-| `/notifications` | 🔒👑 `POST /`, 🔒 `GET /:userId`, `PUT /:id`, `DELETE /:id` |
+```mermaid
+flowchart LR
+    Client["Mobile app / API client"] -->|"HTTP + Bearer JWT"| MW
 
-Responses generally follow the shape `{ success: boolean, data?: ..., message?: string }`.
+    subgraph API["Express app"]
+        MW["Global middleware<br/>CORS · JSON · cookies · rate limiter"] --> R["Feature routes"]
+        R --> Auth["authMiddleware<br/>verify access token"]
+        Auth --> Role["roleMiddleware<br/>user / admin"]
+        Role --> C["Controllers<br/>validation, HTTP"]
+        C --> S["Services<br/>business logic"]
+        S --> M["Mongoose models"]
+    end
 
-A more detailed reference for the Users API (request/response bodies, error cases) is in [`Backend/features/users/documentation/readme.md`](Backend/features/users/documentation/readme.md); the same level of detail hasn't been written up yet for the other features.
-
-## Getting Started
-
-1. **Clone and install**
-
-   ```bash
-   git clone https://github.com/karim029/Brandify.git
-   cd Brandify/Backend
-   npm install
-   ```
-
-2. **Set up MongoDB** — either run it locally or use a hosted connection string (e.g. MongoDB Atlas).
-
-3. **Create a `.env` file** inside `Backend/` (see [Environment Variables](#environment-variables) below).
-
-4. **Run the server**
-
-   ```bash
-   npm run dev
-   ```
-
-   The API will be available at `http://localhost:5000` (or whatever `PORT` you set).
-
-## Environment Variables
-
-Create `Backend/.env` with the following:
-
-```bash
-PORT=5000
-MONGO_URL=mongodb://localhost:27017/brandify
-JWT_SECRET=your_jwt_secret
-
-# Required for password reset / email verification emails
-EMAIL_USER=your_gmail_address@gmail.com
-EMAIL_PASS=your_gmail_app_password
+    M --> DB[("MongoDB")]
+    C -->|images| FS["uploads/ folder<br/>served at /uploads"]
+    S -->|"OTP & reset emails"| Mail["Gmail SMTP"]
 ```
 
-Uploaded files (product images, brand logo) are written to `Backend/uploads/`, which is created automatically on first run and served statically at `/uploads`.
+Checkout (`POST /order`):
 
-## Running Tests
+```mermaid
+sequenceDiagram
+    participant U as Customer
+    participant API as Order controller
+    participant DB as MongoDB
+    U->>API: POST /order {address, discount?}
+    API->>DB: load cart with product prices
+    API->>API: total = sum of price x quantity
+    opt discount code given
+        API->>DB: find code
+        API->>API: check expiry, minimum amount, not already used by this customer
+        API->>API: apply % off, capped at max discount
+    end
+    API->>DB: create order
+    API->>DB: mark code used, decrement stock, clear cart
+    API-->>U: 201 Created + order
+```
+
+```
+Backend/
+├── index.js                 # connects to MongoDB, starts the server
+├── app.js                   # Express app: middleware + route mounting
+├── config/db.js
+├── middleware/
+│   ├── authentication/      # JWT verification
+│   ├── roles/               # role guard
+│   ├── rateLimiter/         # global + per-route limits
+│   └── fileUpload/          # Multer config
+├── utils/                   # tokens, email, OTP generator, product filters
+└── features/
+    ├── users/  products/  Category/  subcategory/  Brand/
+    ├── Cart/   order/     discount/  reviews/      notifications/
+    └── (each: routes/ controllers/ services/ models/ [tests/])
+```
+
+## Getting started
+
+**Prerequisites:** Node.js 18–24 and MongoDB (local or Atlas). Node 25+ is not supported yet: `jsonwebtoken`'s dependency chain uses a Buffer API that Node 25 removed.
+
+```bash
+git clone https://github.com/karim029/Brandify.git
+cd Brandify/Backend
+npm install
+cp .env.example .env      # Windows: copy .env.example .env
+# edit .env: set MONGO_URL and the two JWT secrets at minimum
+npm run dev               # http://localhost:5000
+```
+
+### Environment variables
+
+| Variable | Required | Example | Purpose |
+|---|---|---|---|
+| `PORT` | no | `5000` | HTTP port (default 5000) |
+| `MONGO_URL` | yes | `mongodb://localhost:27017/brandify` | MongoDB connection string |
+| `JWT_ACCESS_SECRET` | yes | long random string | Signs access tokens |
+| `JWT_REFERESH_SECRET` | yes | long random string | Signs refresh tokens (spelled as in the code) |
+| `JWT_ACCESS_EXPIRY` | no | `15m` | Access token lifetime (default `15m`) |
+| `JWT_REFRESH_EXPIRY` | no | `7d` | Refresh token lifetime (default `7d`) |
+| `EMAIL_USER` | for email | `you@gmail.com` | Gmail account that sends OTP / reset emails |
+| `EMAIL_PASS` | for email | Gmail app password | A Gmail [app password](https://support.google.com/accounts/answer/185833), not the account password |
+
+### Seed data
+
+There's no seed script yet. To get an admin, register with `POST /users/register`, then set `role: "admin"` on that user in MongoDB (Compass or `mongosh`).
+
+### Tests
 
 ```bash
 cd Backend
 npm test
 ```
 
-Tests spin up an in-memory MongoDB instance (`mongodb-memory-server`), so no separate database setup is needed to run them. Coverage currently exists for the **Users** and **Products** features; other features don't have automated tests yet.
+Tests start their own in-memory MongoDB, so they never touch the database in your `.env`. They cover the Users and Products features.
 
-## Project Status & Known Limitations
+## API
 
-This is an in-progress project, not a finished product. Worth flagging explicitly:
+Base URL `http://localhost:5000`. 🔒 = needs `Authorization: Bearer <access token>`. 👑 = admin only. Responses use the shape `{ success, data?, message? }`.
 
-- **Frontend is not in this repo yet.** The `Frontend/` folder only contains generated platform scaffolding (iOS/Linux/macOS/Windows config) left over from a Flutter project setup — the actual Flutter app code has been deliberately excluded (see `.gitignore` and the `removed unnecessary frontend files` commit). The mobile app is being built separately.
-- **Test coverage is partial.** Only the Users and Products features have automated tests; Cart, Orders, Discounts, Brand, Category, Subcategory, Reviews, and Notifications do not yet.
-- **No CI/CD, no deployment.** The project has only been run and tested locally so far.
-- **No API documentation tooling** (e.g. Swagger/OpenAPI) — the table above and the Users feature doc are the only current references.
-- **Single-brand assumption.** The `Brand` model represents one store profile, not a multi-vendor marketplace — this is a deliberate scope decision, not an oversight.
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/users/register` | | Create account, sends email OTP |
+| POST | `/users/verify-email` | | Verify email with OTP |
+| POST | `/users/resend-email-verification` | | Resend OTP (rate-limited) |
+| POST | `/users/login` | | Returns access token, sets refresh cookie (rate-limited) |
+| POST | `/users/refresh` | cookie | New access token from the refresh cookie |
+| POST | `/users/logout` | 🔒 | Clears the refresh cookie |
+| POST | `/users/request-password-reset` | | Emails a reset link (rate-limited) |
+| POST | `/users/reset-password/:token` | | Set a new password |
+| GET, PUT | `/users/:id` | 🔒 | Get / update profile |
+| GET | `/users` | 🔒👑 | Paginated user list |
+| DELETE | `/users/:id` | 🔒👑 | Delete a user |
+| GET | `/products` | | List products. Query: `page`, `limit`, `minPrice`, `maxPrice`, `name`, `sizes`, `colors`, `category`, `subCategory` |
+| GET | `/products/:id` | | Product details |
+| POST, PUT, DELETE | `/products`, `/products/:id` | 🔒👑 | Manage products (`multipart/form-data`, field `images`, max 5) |
+| GET | `/Category`, `/Category/:name/products` | | Categories / products in a category |
+| POST, PUT, DELETE | `/Category`, `/Category/:id` | 🔒👑 | Manage categories |
+| GET | `/subcategory`, `/subcategory/:id` | | Subcategories |
+| POST, PUT, DELETE | `/subcategory`, `/subcategory/:id` | 🔒👑 | Manage subcategories |
+| GET | `/brand` | | Brand profile |
+| POST, PUT, DELETE | `/brand` | 🔒👑 | Manage brand profile (field `logo`) |
+| GET, POST, PUT, DELETE | `/Cart` | 🔒 | View cart, add item, change quantity, empty cart |
+| DELETE | `/Cart/:productId` | 🔒 | Remove one item |
+| POST | `/order` | 🔒 | Place an order from the cart, optional `discount` code |
+| GET | `/order` | 🔒 | My orders (paginated) |
+| GET | `/order/allOrders` | 🔒👑 | All orders (paginated, sortable) |
+| GET, PUT, DELETE | `/order/:id` | 🔒👑 | Order details / update status / delete |
+| POST, GET | `/discounts`, `/discounts/:code` | 🔒👑 | Create / look up / list active codes |
+| PUT, DELETE | `/discounts/:code` | 🔒👑 | Deactivate / delete a code |
+| GET | `/reviews?id=<productId>`, `/reviews/top?id=<productId>` | | Product reviews / top 5 |
+| POST, DELETE | `/reviews`, `/reviews/:id` | 🔒 | Add / delete own review |
+| POST | `/notifications` | 🔒👑 | Notify one user or broadcast |
+| GET | `/notifications/:userId` | 🔒 | List notifications |
+| PUT, DELETE | `/notifications/:id` | 🔒 | Mark as read / delete |
 
-## Folder Structure
+Full request/response examples for the Users API: [`Backend/features/users/documentation/readme.md`](Backend/features/users/documentation/readme.md).
 
-```
-Brandify/
-├── Backend/
-│   ├── app.js                # Express app setup, route mounting
-│   ├── index.js               # Server entry point
-│   ├── config/
-│   │   └── db.js              # MongoDB connection
-│   ├── features/
-│   │   ├── users/
-│   │   ├── products/
-│   │   ├── Category/
-│   │   ├── subcategory/
-│   │   ├── Brand/
-│   │   ├── Cart/
-│   │   ├── order/
-│   │   ├── discount/
-│   │   ├── reviews/
-│   │   └── notifications/
-│   │       └── (each: controllers/ services/ models/ routes/ [tests/])
-│   ├── middleware/
-│   │   ├── authentication/
-│   │   ├── roles/
-│   │   └── fileUpload/
-│   └── utils/
-└── Frontend/                  # Flutter platform scaffolding only (see Known Limitations)
-```
+## Known limitations & what's next
+
+- **No payments.** Orders are created as `Unpaid`; there's no payment gateway yet.
+- **Checkout isn't transactional.** Creating the order, decrementing stock and marking the discount as used are separate writes. A MongoDB transaction would stop two customers from buying the last item at the same moment.
+- **Ownership checks.** `GET/PUT /users/:id` and `GET /notifications/:userId` require a logged-in user but don't yet check that the id is the caller's own.
+- **Refresh tokens aren't stored or rotated**, so logout clears the cookie but can't revoke a token that was already issued.
+- **Test coverage** is limited to Users and Products. Cart, Orders and Discounts need integration tests next.
+- **Node 25+ unsupported** until the JWT library is swapped (e.g. for `jose`).
+- No OpenAPI/Swagger docs, Docker setup, CI pipeline or seed script yet.
+- Images are stored on local disk (`uploads/`); production would use object storage.
+- The Flutter client is not in this repository.
