@@ -13,3 +13,6 @@ npm-debug.log*
 
 # User uploads (created at runtime)
 Backend/uploads/
+
+# Flutter client lives outside this repo
+Frontend/
